@@ -1,0 +1,124 @@
+---
+title: "Effort Matrices"
+author: "Fiona Spooner"
+date: "October 22, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE,message = FALSE,fig.width = 12, fig.height = 9)
+```
+
+
+```{r}
+library(here)
+library(dplyr)
+library(reshape2)
+library(purrr)
+
+```
+
+Effort
+
+Calculating the daily effort at each site i.e. the number of cameras that were on each day at each site where the effort data look like this:
+
+```{r, echo = FALSE}
+example<-read.csv("mara_north_effort.csv")
+head(example)
+
+```
+
+```{r, eval = FALSE}
+effort_files<-list("mara_north_effort.csv", "mara_triangle_effort.csv", "naboisho_effort.csv", "omc_effort.csv")
+
+for(file in effort_files){
+  
+    eff<-read.csv(here::here(file), stringsAsFactors = FALSE, na.strings=c("","NA"))
+    eff$Start_1<-as.Date(eff$Start_1, format = "%d-%m-%y") 
+    eff$End_1<-as.Date(eff$End_1, format = "%d-%m-%y") 
+    
+    eff$Start_2<-as.Date(eff$Start_2, format = "%d-%m-%y")
+    eff$End_2<-as.Date(eff$End_2, format = "%d-%m-%y")
+    
+    start<-min(na.omit(eff$Start_1))
+    end<-max(na.omit(eff$End_2))
+    
+    all_days<-seq(start, end, by = "day")
+    all_zeros<-rep(0, length(all_days))
+    
+    effort_func<-function(loc){
+      
+      site<-eff[eff$Location_ID == loc,]
+      effort<-all_zeros
+    
+      if(!is.na(site$Start_1) & !is.na(site$End_1)){
+        loc_start1<-site$Start_1
+        loc_end1<-site$End_1
+        effort[which(all_days == loc_start1):which(all_days == loc_end1)]<-1
+      }
+    
+      if(!is.na(site$Start_2) & !is.na(site$End_2)){
+        loc_start2<-site$Start_2
+        loc_end2<-site$End_2
+        effort[which(all_days == loc_start2):which(all_days == loc_end2)]<-1
+      }  
+      #print(loc)
+      return(effort)
+      
+      }
+    
+    
+    effort_out<-lapply(eff$Location_ID,effort_func)
+    
+    effort_mat<-do.call("rbind", effort_out)
+    
+    effort_sum<-colSums(effort_mat)
+    
+    plot(effort_sum, type = "l")
+    
+    effort_df<-data.frame(eff$Location_ID,effort_mat)
+    colnames(effort_df)<-c("Location_ID", as.character(all_days))
+    
+    file_new<-gsub("effort", "effort_matrix", file)
+    
+    print(file)
+    write.csv(effort_df, here::here(file_new), row.names = FALSE)
+    
+}
+```
+
+####Combining the effort matrices
+
+```{r, eval = FALSE}
+
+effort_files<-list.files(pattern = "*_effort_matrix.csv")
+
+for (file in effort_files){
+  
+  eff<-read.csv(file)
+  eff_sum<-melt(colSums(eff[,2:ncol(eff)]))
+  eff_sum$date<-as.Date(row.names(eff_sum), format = "X%Y.%m.%d")
+  eff_sum$site<-"OMC"
+
+  file_new<-gsub("_effort_matrix", "daily_effort", file)
+  
+  write.csv(eff_sum, here::here(file_new), row.names = FALSE)
+
+}
+
+```
+
+```{r, eval = FALSE}
+
+files <- list.files(pattern = "*daily_effort.csv", full.names = TRUE)
+
+ef <- files %>%
+  map(read_csv) %>%    # read in all the files individually, using
+  reduce(rbind)        # reduce with rbind into one dataframe
+
+colnames(ef)[1]<-"effort"
+
+#write.csv(ef,"all_sites_effort.csv", row.names = FALSE)
+
+```
+
